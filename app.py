@@ -1,4 +1,12 @@
 import streamlit as st
+
+# SIGURADUHIN NA MERONG GANITO SA PINAKA-TAAS NG APP.PY:
+if 'active_view' not in st.session_state:
+    st.session_state.active_view = "login"  # O kung ano man ang default view mo
+
+# Kung gumagamit ka ng page role o state checker na tinatawag na 'dashboard'
+if 'dashboard' not in st.session_state:
+    st.session_state['dashboard'] = {}  # I-initialize bilang blangkong dictionary para hindi mag-KeyError
 import db  # Gagamitin ang kinopya mong db.py sa parehong folder
 
 # I-configure ang web page setting para maging professional, responsive at maximized ang layout sa computer screens
