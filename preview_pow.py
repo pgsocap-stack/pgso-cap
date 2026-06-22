@@ -149,6 +149,24 @@ def render_preview_pow_module():
 def render_edit_mode_interface():
     st.markdown("### ✏️ EDIT MODE - Update POW Record")
     
+    # 🔥 DITO NATIN TINATAWAG ANG SCRIPT MULA SA GITHUB MO
+    try:
+        from master_items import ITEM_MASTER_LIST
+        master_items_pool = ITEM_MASTER_LIST
+    except ImportError:
+        try:
+            from modules.pow.master_items import ITEM_MASTER_LIST
+            master_items_pool = ITEM_MASTER_LIST
+        except Exception as e:
+            st.warning(f"⚠️ Paalala: Hindi ma-load ang master_items.py ({e}). Gagamit ng basic fallback list.")
+            master_items_pool = [
+                ("Portland Cement (Type 1)", "bags", 285.00),
+                ("Reinforcing Steel Bars 12mm", "pcs", 310.00)
+            ]
+
+    # Map mapping para sa mabilisang auto-fill ng Unit at Price
+    suggestions_dict = {item[0]: {"unit": item[1], "price": float(item[2])} for item in master_items_pool}
+
     # --- UPPER FRAME: DETAILS ---
     with st.container(border=True):
         st.markdown("**Details of POW**")
@@ -169,15 +187,13 @@ def render_edit_mode_interface():
         })
     st.dataframe(display_edit_rows, use_container_width=True, hide_index=True)
 
-    # --- FORM INPUTS FOR ROWS (Line Modifier Section) ---
+    # --- FORM INPUTS FOR ROWS WITH AUTOSUGGEST ---
     with st.container(border=True):
         st.markdown("**Row Modification Form**")
         
-        # Dropdown para pumili kung anong linya ang babaguhin o kung bagong item
         line_options = ["➕ ADD NEW LINE"] + [f"Line {i+1}: {row[2][:30]}..." for i, row in enumerate(st.session_state.edit_items_list)]
         selected_line_idx = st.selectbox("Pumili ng linyang babaguhin o magdagdag:", options=line_options)
         
-        # Autofill values depende sa napiling linya
         if selected_line_idx == "➕ ADD NEW LINE":
             init_qty, init_unit, init_desc, init_price, init_orig = "", "", "", "", ""
         else:
@@ -185,18 +201,41 @@ def render_edit_mode_interface():
             target_row = st.session_state.edit_items_list[idx]
             init_qty, init_unit, init_desc, init_price, init_orig = target_row[0], target_row[1], target_row[2], target_row[3], target_row[4]
 
-        # Input fields ng form
+        # 🔍 SMART DROPDOWN SEARCH ENGINE
+        st.markdown("<small style='color: gray;'>🔍 I-type dito ang pangalan ng materyales para mag-search sa master list:</small>", unsafe_allow_html=True)
+        
+        dropdown_options = list(suggestions_dict.keys())
+        if init_desc and init_desc not in dropdown_options:
+            dropdown_options.insert(0, init_desc)
+        dropdown_options.insert(0, "Custom Entry / Manu-manong Isusulat")
+
+        selected_suggestion = st.selectbox(
+            "Smart Search Item Masterlist:",
+            options=dropdown_options,
+            index=dropdown_options.index(init_desc) if init_desc in dropdown_options else 0,
+            label_visibility="collapsed"
+        )
+
+        # Kung pumili sila ng aytem sa listahan, kusa nitong hihilahin ang Unit at Price
+        if selected_suggestion != "Custom Entry / Manu-manong Isusulat":
+            final_desc = selected_suggestion
+            if selected_suggestion in suggestions_dict:
+                init_unit = suggestions_dict[selected_suggestion]["unit"]
+                init_price = suggestions_dict[selected_suggestion]["price"]
+        else:
+            final_desc = init_desc
+
+        # --- GRID CONTROLLERS FOR ENTRY ---
         f_col1, f_col2, f_col3, f_col4 = st.columns([1, 1, 3, 1.5])
         with f_col1:
             form_qty = st.text_input("QTY:", value=str(init_qty), key="form_qty")
         with f_col2:
             form_unit = st.text_input("UNIT:", value=str(init_unit), key="form_unit")
         with f_col3:
-            form_desc = st.text_input("DESCRIPTION:", value=str(init_desc), key="form_desc")
+            form_desc = st.text_input("DESCRIPTION (Final):", value=str(final_desc), key="form_desc")
         with f_col4:
             form_price = st.text_input("PRICE:", value=str(init_price), key="form_price")
 
-        # Control operation handlers
         action_col1, action_col2 = st.columns(2)
         with action_col1:
             if st.button("🔄 Update Selected Line", use_container_width=True, type="secondary"):
@@ -208,7 +247,7 @@ def render_edit_mode_interface():
                         st.session_state.edit_items_list[idx] = [
                             float(form_qty), form_unit, form_desc.strip(), float(form_price), init_orig
                         ]
-                        st.toast("Line updated successfully!", icon="🔄")
+                        st.toast("Linya matagumpay na binago!", icon="🔄")
                         st.rerun()
                     except ValueError:
                         st.error("Dapat valid na numero ang QTY at PRICE, boss.")
@@ -229,70 +268,23 @@ def render_edit_mode_interface():
                     except ValueError:
                         st.error("Dapat valid na numero ang QTY at PRICE, boss.")
 
-    # --- FINAL SAVE OVERWRITE PIPELINE ---
+    # --- FINAL SAVE OVERWRITE PIPELINE (Malinis na SQL Only nang walang pasabog sa Cloud)
     st.markdown("---")
     save_col1, save_col2 = st.columns(2)
     
     with save_col1:
         if st.button("💾 SAVE ALL CHANGES & OVERWRITE DATABASE", type="primary", use_container_width=True):
-            excel_path = r"G:\jrm\master_items.xlsx"
-            
             if not edit_proj_name.strip() or not edit_location.strip():
                 st.error("Huwag iwanang blangko ang Name at Location, boss.")
                 return
 
-            # 1. EXCEL-DATABASE SYNC OVERWRITE PIPELINE
-            if os.path.exists(excel_path):
-                try:
-                    wb = load_workbook(excel_path)
-                    ws = wb.active
-                    
-                    for row in st.session_state.edit_items_list:
-                        q, u, d, p, orig_d = row[0], row[1], row[2], row[3], row[4]
-                        
-                        # 🔍 TRACER HAKBANG: Hahanapin ang lumang pangalan sa Excel Column 1
-                        target_row = None
-                        for ex_row in range(2, ws.max_row + 1):
-                            cell_val = ws.cell(row=ex_row, column=1).value
-                            if cell_val and str(cell_val).strip().lower() == str(orig_d).strip().lower():
-                                target_row = ex_row
-                                break
-                        
-                        if target_row:
-                            # OVERWRITE SUCCESS
-                            ws.cell(row=target_row, column=1, value=d)
-                            ws.cell(row=target_row, column=2, value=u)
-                            ws.cell(row=target_row, column=3, value=p)
-                        else:
-                            # Kung sariwang item, i-append sa huling linya ng Excel
-                            new_row = ws.max_row + 1
-                            ws.cell(row=new_row, column=1, value=d)
-                            ws.cell(row=new_row, column=2, value=u)
-                            ws.cell(row=new_row, column=3, value=p)
-                            
-                    wb.save(excel_path)
-                    wb.close()
-                except Exception as e:
-                    st.error(f"❌ Excel Sync Error: Hindi mai-save ang data sa {excel_path}. Detalye: {e}")
-                    return
-            else:
-                st.warning("⚠️ Paalala: Walang nahanap na `G:\\jrm\\master_items.xlsx`. Nilaktawan ang Excel overwrite block.")
-
-            # 2. BACKGROUND SCRIPT AUTOMATION INTERFACE
-            if os.path.exists(r"G:\jrm"):
-                try:
-                    subprocess.run(["py", "import_master.py"], cwd=r"G:\jrm", check=True, capture_output=True, text=True)
-                except Exception as err:
-                    st.error(f"⚠️ Na-save sa Excel pero nagka-error ang 'import_master.py'. Detalye: {err}")
-                    return
-
-            # 3. SQL SYSTEM UPDATE
+            # DATABASE UPDATE REFRESH PIPELINE
             final_items_to_save = [(r[0], r[1], r[2], r[3]) for r in st.session_state.edit_items_list]
             success_main = db.update_project_main_details(st.session_state.selected_pow_id, edit_proj_name.strip(), edit_location.strip())
             success_items = db.update_project_items_batch(st.session_state.selected_pow_id, final_items_to_save)
             
             if success_main and success_items:
-                st.success("🎉 Swabe ang ikot, boss! Na-save at na-overwrite na ang Database at Excel master-list.")
+                st.success("🎉 Swabe ang ikot, boss! Na-update na ang Database gamit ang bagong aytem.")
                 st.session_state.in_edit_mode = False
                 st.rerun()
             else:
