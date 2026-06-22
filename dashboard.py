@@ -1,6 +1,10 @@
 import streamlit as st
 import db  # Konektado sa iyong db.py (Basta siguraduhing tumatakbo ang MySQL mo)
 
+# Maayos na pag-import ng mga external modules mula sa iyong project directory
+from modules.pow.preview_pow import render_preview_pow_module
+from modules.pow.add_pow import render_add_pow_module
+
 class OfficeDashboard:
     def __init__(self, username, user_role, on_logout):
         self.username = username
@@ -72,21 +76,17 @@ class OfficeDashboard:
         
         st.divider()
 
-        # --- DYNAMIC RENDERING PANEL (Gaya ng clear_content_area at active_module loading) ---
+        # --- DYNAMIC RENDERING PANEL ---
         if st.session_state.active_view == "Dashboard Overview":
             self.show_welcome_message()
             
         elif st.session_state.active_view == "Add New POW":
-            # Dito natin iimport ang web module sa susunod na hakbang
-            st.info("Encoding Area - Add New POW Module Connected.")
+            # 🚀 Direkta nang tinatawag ang totoong Add New POW module na binuo natin
+            render_add_pow_module()
             
         elif st.session_state.active_view == "Preview POW Records":
-            from modules.pow.preview_pow import render_preview_pow_module
-            render_preview_pow_module()  # 👈 TINAWAG NATIN: Para lumabas ang Preview UI
-
-        elif st.session_state.active_view == "Add New POW":
-            from modules.pow.add_pow import render_add_pow_module
-            render_add_pow_module()      # 👈 TINAWAG NATIN: Para lumabas ang Encoding Area UI
+            # 👁️ Tinatawag ang Preview interface
+            render_preview_pow_module()
                 
         elif st.session_state.active_view == "POW Masterlist History":
             st.info("Office Records - POW Masterlist History Connected.")
@@ -146,7 +146,6 @@ class OfficeDashboard:
             if not ent_proj_name or not ent_location:
                 st.error("Hindi pwedeng iwanang blangko ang Project Name at Location, boss.")
             else:
-                # Dito tatawagin ang db functions mo kapag kinonekta na natin ang db layer
                 st.success("Matagumpay na na-overwrite at na-update ang buong data, boss!")
                 st.rerun()
 
@@ -156,7 +155,6 @@ class OfficeDashboard:
     def open_user_management(self):
         st.markdown("### 👥 REGISTERED ENCODERS LIST")
         
-        # Nilagyan ng Try-Except block para hindi magcrash ang Streamlit habang wala pang table
         try:
             users = db.get_all_encoders()
         except Exception:
@@ -169,7 +167,6 @@ class OfficeDashboard:
         for user in users:
             u_id, u_name, u_role, u_status = user[0], user[1], user[2], user[3]
             
-            # Card format bawat rehistradong user sa web interface
             with st.container(border=True):
                 col_info, col_actions = st.columns([3, 2])
                 with col_info:
