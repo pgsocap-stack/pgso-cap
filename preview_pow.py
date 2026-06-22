@@ -147,25 +147,25 @@ def render_preview_pow_module():
 # ✏️ INTERNAL MODULE: THE EDIT MODE INTERFACE (Immersed Modal Emulation)
 # ==============================================================================
 def render_edit_mode_interface():
+   
+def render_edit_mode_interface():
     st.markdown("### ✏️ EDIT MODE - Update POW Record")
     
-    # 🔥 DITO NATIN TINATAWAG ANG SCRIPT MULA SA GITHUB MO
+    # 🌟 KULANG 1: HAKBANG PAPUNTANG MASTER LIST IMPORT (Dito mo isaksak sa pinakataas)
     try:
-        from master_items import ITEM_MASTER_LIST
-        master_items_pool = ITEM_MASTER_LIST
+        from master_list import ITEM_MASTER_LIST
     except ImportError:
         try:
-            from modules.pow.master_items import ITEM_MASTER_LIST
-            master_items_pool = ITEM_MASTER_LIST
-        except Exception as e:
-            st.warning(f"⚠️ Paalala: Hindi ma-load ang master_items.py ({e}). Gagamit ng basic fallback list.")
-            master_items_pool = [
-                ("Portland Cement (Type 1)", "bags", 285.00),
-                ("Reinforcing Steel Bars 12mm", "pcs", 310.00)
-            ]
+            from master_items import ITEM_MASTER_LIST
+        except ImportError:
+            try:
+                from modules.pow.master_list import ITEM_MASTER_LIST
+            except Exception as e:
+                st.error(f"⚠️ Hindi mahanap ang master_list.py sa GitHub: {e}")
+                ITEM_MASTER_LIST = []
 
-    # Map mapping para sa mabilisang auto-fill ng Unit at Price
-    suggestions_dict = {item[0]: {"unit": item[1], "price": float(item[2])} for item in master_items_pool}
+    # I-convert para maging dictionary finder
+    master_pool = {item[0]: {"unit": item[1], "price": float(item[2])} for item in ITEM_MASTER_LIST}
 
     # --- UPPER FRAME: DETAILS ---
     with st.container(border=True):
@@ -174,7 +174,6 @@ def render_edit_mode_interface():
         edit_location = st.text_input("Project Location:", value=st.session_state.edit_location)
 
     # --- MIDDLE FRAME: TABLE PREVIEW ---
-  # --- MIDDLE FRAME: TABLE PREVIEW ---
     st.markdown("**List of Items (Current Session)**")
     display_edit_rows = []
     for idx, row in enumerate(st.session_state.edit_items_list):
@@ -190,18 +189,14 @@ def render_edit_mode_interface():
 
 
     # ==============================================================================
-    # 🎯 DITO NATIN IPAPATONG ANG BINIGAY MONG CODE (May tamang Tab/Indentation)
+    # 🏛️ HAKBANG 2: ANG SMART DROPDOWN TEXT BOX INTERFACE (Yung Form sa Baba)
     # ==============================================================================
-    
-    # Kukunin ang lahat ng pangalan ng materyales mula sa master_pool (na nakuha sa taas ng function)
     dropdown_options = list(master_pool.keys())
     dropdown_options.insert(0, "✨ Manu-manong Isusulat (Custom Entry) / Pumili sa ibaba...")
 
     st.markdown("### ➕ Magdagdag ng Bagong Aytem sa POW")
 
-    # Wrapper container para malinis tingnan sa screen
     with st.container(border=True):
-        
         # 🔍 ANG SMART SEARCH TEXT BOX/DROPDOWN
         selected_item = st.selectbox(
             "Mag-search o Pumili ng Materyales (Item Description):",
@@ -223,10 +218,8 @@ def render_edit_mode_interface():
         
         with col1:
             input_qty = st.number_input("QTY (Dami):", min_value=0.0, step=1.0, value=0.0, key="enc_qty")
-            
         with col2:
             input_unit = st.text_input("UNIT:", value=default_unit, key="enc_unit")
-            
         with col3:
             input_price = st.number_input("UNIT PRICE (Presyo):", min_value=0.0, step=0.01, value=default_price, key="enc_price")
 
@@ -253,33 +246,5 @@ def render_edit_mode_interface():
                     float(input_price), 
                     final_description.strip()
                 ])
-                
                 st.toast(f"🎉 Naidagdag na sa listahan: {final_description.strip()}", icon="✅")
                 st.rerun()
-
-    # --- FINAL SAVE OVERWRITE PIPELINE (Malinis na SQL Only nang walang pasabog sa Cloud)
-    st.markdown("---")
-    save_col1, save_col2 = st.columns(2)
-    
-    with save_col1:
-        if st.button("💾 SAVE ALL CHANGES & OVERWRITE DATABASE", type="primary", use_container_width=True):
-            if not edit_proj_name.strip() or not edit_location.strip():
-                st.error("Huwag iwanang blangko ang Name at Location, boss.")
-                return
-
-            # DATABASE UPDATE REFRESH PIPELINE
-            final_items_to_save = [(r[0], r[1], r[2], r[3]) for r in st.session_state.edit_items_list]
-            success_main = db.update_project_main_details(st.session_state.selected_pow_id, edit_proj_name.strip(), edit_location.strip())
-            success_items = db.update_project_items_batch(st.session_state.selected_pow_id, final_items_to_save)
-            
-            if success_main and success_items:
-                st.success("🎉 Swabe ang ikot, boss! Na-update na ang Database gamit ang bagong aytem.")
-                st.session_state.in_edit_mode = False
-                st.rerun()
-            else:
-                st.error("❌ SQL Error: May nagka-problema sa pag-update ng records sa database.")
-
-    with save_col2:
-        if st.button("❌ CANCEL EDIT MODE", use_container_width=True):
-            st.session_state.in_edit_mode = False
-            st.rerun()
