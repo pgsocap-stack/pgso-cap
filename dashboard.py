@@ -1,9 +1,11 @@
 import streamlit as st
 import db  # Konektado sa iyong db.py (Basta siguraduhing tumatakbo ang MySQL mo)
 
+
 # Maayos na pag-import ng mga external modules mula sa iyong project directory
 from modules.pow.preview_pow import render_preview_pow_module
 from modules.pow.add_pow import render_add_pow_module
+from modules.pow.list_pow import render_pow_history_module
 
 class OfficeDashboard:
     def __init__(self, username, user_role, on_logout):
@@ -88,8 +90,8 @@ class OfficeDashboard:
             # 👁️ Tinatawag ang Preview interface
             render_preview_pow_module()
                 
-        elif st.session_state.active_view == "POW Masterlist History":
-            st.info("Office Records - POW Masterlist History Connected.")
+       elif st.session_state.active_view == "POW Masterlist History":
+            render_pow_history_module()  # 👈 Papalitan nito ang dating st.info() placeholder text
             
         elif st.session_state.active_view == "User Management Panel":
             self.open_user_management()
