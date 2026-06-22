@@ -1,7 +1,6 @@
 import streamlit as st
 import db  # Konektado sa iyong db.py (Basta siguraduhing tumatakbo ang MySQL mo)
 
-
 # Maayos na pag-import ng mga external modules mula sa iyong project directory
 from modules.pow.preview_pow import render_preview_pow_module
 from modules.pow.add_pow import render_add_pow_module
@@ -69,7 +68,6 @@ class OfficeDashboard:
         # ==============================================================================
         # 👑 TOPBAR & MAIN CONTENT COMPONENT
         # ==============================================================================
-        # Ipinapakita kung sino ang logged-in na User at Role (Kanan ng screen)
         col1, col2 = st.columns([2, 1])
         with col1:
             st.subheader(f"📍 {st.session_state.active_view}")
@@ -78,20 +76,23 @@ class OfficeDashboard:
         
         st.divider()
 
-        # --- DYNAMIC RENDERING PANEL ---
+        # ==============================================================================
+        # 🎯 DYNAMIC RENDERING PANEL (CLEAN & UNIQUE SECTIONS)
+        # ==============================================================================
         if st.session_state.active_view == "Dashboard Overview":
             self.show_welcome_message()
             
         elif st.session_state.active_view == "Add New POW":
-            # 🚀 Direkta nang tinatawag ang totoong Add New POW module na binuo natin
+            # 🚀 Tinatawag ang totoong Add New POW module para sa data entry
             render_add_pow_module()
             
         elif st.session_state.active_view == "Preview POW Records":
-            # 👁️ Tinatawag ang Preview interface
+            # 👁️ Tinatawag ang Preview at Excel export interface
             render_preview_pow_module()
                 
         elif st.session_state.active_view == "POW Masterlist History":
-            render_pow_history_module()  # 👈 Papalitan nito ang dating st.info() placeholder text
+            # 📜 Tinatawag ang buwanang kasaysayan/history module
+            render_pow_history_module()
             
         elif st.session_state.active_view == "User Management Panel":
             self.open_user_management()
@@ -118,14 +119,13 @@ class OfficeDashboard:
         st.toast("⚠️ Ang function na ito ay kasalukuyang inihahanda para sa susunod na update.", icon="ℹ️")
 
     # ==============================================================================
-    # ✏️ EDIT MODE MODAL COMPONENT (Ginamit ang native Dialog feature ng Streamlit)
+    # ✏️ EDIT MODE MODAL COMPONENT (Native Dialog Feature)
     # ==============================================================================
     @st.dialog("✏️ EDIT MODE - Update POW Record", width="large")
     def open_edit_pow_modal(self):
         pow_id = st.session_state.current_selected_pow_id
         st.write(f"Editing POW ID Reference: **{pow_id}**")
         
-        # Grid input para sa project metadata
         c1, c2 = st.columns(2)
         with c1:
             ent_proj_name = st.text_input("Project Title / Name:", value="Sample Project Title")
@@ -133,10 +133,8 @@ class OfficeDashboard:
             ent_location = st.text_input("Project Location:", value="Nueva Ecija")
             
         st.markdown("#### Listahan ng mga Aytem")
-        # Dito lalabas ang dataframe array table ng item entries mo
         st.caption("Items Framework Loaded (Editable items will render inside Web-Table array layers)")
         
-        # Form field controllers inside modal
         st.markdown("---")
         col_q, col_u, col_d, col_p = st.columns([1, 1, 3, 2])
         qty = col_q.text_input("QTY")
