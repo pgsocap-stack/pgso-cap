@@ -81,11 +81,8 @@ class OfficeDashboard:
             st.info("Encoding Area - Add New POW Module Connected.")
             
         elif st.session_state.active_view == "Preview POW Records":
-            st.info("Data Viewer - Preview POW Records Connected.")
-            # Trick para mapagana ang Edit Modal mo mula sa preview state
-            if st.button("✏️ Isalang sa Edit Mode Test Window"):
-                st.session_state.current_selected_pow_id = 1 # Sample data loader test
-                self.open_edit_pow_modal()
+            from modules.pow.preview_pow import render_preview_pow_module
+            render_preview_pow_module()
                 
         elif st.session_state.active_view == "POW Masterlist History":
             st.info("Office Records - POW Masterlist History Connected.")
