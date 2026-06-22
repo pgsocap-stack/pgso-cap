@@ -90,7 +90,7 @@ class OfficeDashboard:
             # 👁️ Tinatawag ang Preview interface
             render_preview_pow_module()
                 
-       elif st.session_state.active_view == "POW Masterlist History":
+        elif st.session_state.active_view == "POW Masterlist History":
             render_pow_history_module()  # 👈 Papalitan nito ang dating st.info() placeholder text
             
         elif st.session_state.active_view == "User Management Panel":
