@@ -97,9 +97,24 @@ def show_dashboard():
     # ==============================================================================
     from dashboard import OfficeDashboard
     
-    # Siguraduhing pantay ang indentation at walang sumobrang spaces sa parenthesis
+    # Dito natin ipinapasa ang session parameters diretso sa Streamlit OfficeDashboard layer
     OfficeDashboard(
         username=st.session_state.username,
         user_role=st.session_state.user_role,
         on_logout=handle_web_logout
     )
+
+
+# --- APP CONTROLLER (Katulad ng AppController class mo sa Tkinter) ---
+# Pinananatili itong walang side-effect para kapag dashboard ang active, gumana ang sidebar nito nang buo.
+if st.session_state.page == 'login' or st.session_state.page == 'signup':
+    _, center_col, _ = st.columns([1, 2, 1])
+    with center_col:
+        with st.container(border=True): # Malinis na card wrapper para sa logging pages
+            if st.session_state.page == 'login':
+                show_login()
+            elif st.session_state.page == 'signup':
+                show_signup()
+else:
+    # Kapag 'dashboard' na ang active, hinahayaan nating sakupin ang buong screen para gumana ang structural sidebar
+    show_dashboard()
