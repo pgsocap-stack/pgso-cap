@@ -1,366 +1,182 @@
+import streamlit as st
+import os
 import subprocess
 from openpyxl import load_workbook
-import tkinter as tk
-from tkinter import ttk, messagebox
-import db
+import db  # Koneksyon sa iyong database layer
 
-class AddPowModule(tk.Frame):
-    def __init__(self, parent):
-        super().__init__(parent, bg="#f7fafc")
+def render_add_pow_module():
+    """
+    Main component para sa paglikha at pag-save ng bagong Program of Works (POW).
+    100% Web-ready, walang Tkinter dependencies, at compatible sa cloud.
+    """
+    st.markdown("## 🏗️ CREATE NEW PROGRAM OF WORK (POW)")
+
+    # ==========================================================================
+    # INITIALIZATION NG SESSION STATES PARA SA BAGONG PROYEKTO
+    # ==========================================================================
+    if 'new_items_list' not in st.session_state:
+        st.session_state.new_items_list = []  # Listahan ng mga aytem para sa kasalukuyang session
+
+    # --- UPPER FRAME: PROYEKTO DETAILS ---
+    with st.container(border=True):
+        st.markdown("#### 📝 General Project Details")
+        proj_col1, proj_col2 = st.columns(2)
+        with proj_col1:
+            project_name = st.text_input("Project Title / Name:", placeholder="Hal: Concreting of Barangay Road...")
+        with proj_col2:
+            location = st.text_input("Project Location:", placeholder="Hal: Zone 4, San Fernando...")
+
+    # --- MIDDLE FRAME: LIVE TABLE PREVIEW ---
+    st.markdown("#### 📋 Current Items in POW")
+    display_new_rows = []
+    grand_total = 0.0
+
+    for idx, row in enumerate(st.session_state.new_items_list):
+        qty = float(row[0])
+        price = float(row[3])
+        total = qty * price
+        grand_total += total
         
-        self.temporary_items = []
-        self.master_items_cache = {} # Itatago dito ang Unit at Price ng mga dropdown choices
-        self.search_popup = None     # Dito itatago ang floating window ng search results
+        display_new_rows.append({
+            "Line": idx + 1,
+            "QTY": qty,
+            "UNIT": row[1],
+            "ITEM DESCRIPTION": row[2],
+            "UNIT PRICE": f"P {price:,.2f}",
+            "TOTAL PRICE": f"P {total:,.2f}"
+        })
 
-        # --- HEADER ---
-        header = tk.Label(self, text="CREATE PROGRAM OF WORK (POW)", font=("Segoe UI", 16, "bold"), fg="#1a365d", bg="#f7fafc")
-        header.pack(anchor="w", padx=20, pady=15)
+    if display_new_rows:
+        st.dataframe(display_new_rows, use_container_width=True, hide_index=True)
+        # 💰 SUMMARY BAR
+        st.info(f"### **ESTIMATED TOTAL COST:** `P {grand_total:,.2f}`")
+    else:
+        st.info("📭 Blangko pa ang listahan ng mga aytem. Gumamit ng form sa ibaba para magdagdag.")
 
-        # --- FORM INPUTS ---
-        form_frame = tk.LabelFrame(self, text=" Item Entry (Max 150 Items) ", font=("Segoe UI", 10, "bold"), bg="white", padx=15, pady=15)
-        form_frame.pack(fill="x", padx=20, pady=10)
-
-        tk.Label(form_frame, text="Qty:", bg="white").grid(row=0, column=0, sticky="e", pady=5)
-        self.qty_entry = tk.Entry(form_frame, width=10)
-        self.qty_entry.grid(row=0, column=1, padx=5, sticky="w")
-        self.qty_entry.insert(0, "0") # Default value para iwas ValueError
-
-        tk.Label(form_frame, text="Unit:", bg="white").grid(row=0, column=2, sticky="e", pady=5)
-        self.unit_combobox = ttk.Combobox(form_frame, values=["gal", "lit", "tin", "pc", "box", "bag", "cu.m"], width=10)
-        self.unit_combobox.grid(row=0, column=3, padx=5, sticky="w")
-        self.unit_combobox.set("pc")
-
-        tk.Label(form_frame, text="Item Name:", bg="white").grid(row=0, column=4, sticky="e", pady=5)
+    # --- LOWER FRAME: FORM INPUTS PARA SA PAGDAGDAG NG ROW ---
+    with st.container(border=True):
+        st.markdown("#### ➕ Add Item to List")
         
-        self.name_entry = tk.Entry(form_frame, width=35)
-        self.name_entry.grid(row=0, column=5, padx=5, sticky="w")
-        
-        self.name_entry.bind("<Return>", self.trigger_multi_dynamic_search) # Enter sa Item Name field
+        f_col1, f_col2, f_col3, f_col4 = st.columns([1, 1, 3, 1.5])
+        with f_col1:
+            form_qty = st.text_input("QTY:", value="", placeholder="0", key="add_qty")
+        with f_col2:
+            form_unit = st.text_input("UNIT:", value="", placeholder="pcs/bags", key="add_unit")
+        with f_col3:
+            form_desc = st.text_input("ITEM DESCRIPTION:", value="", placeholder="Pangalan o detalye ng materyales...", key="add_desc")
+        with f_col4:
+            form_price = st.text_input("UNIT PRICE:", value="", placeholder="0.00", key="add_price")
 
-        tk.Label(form_frame, text="Unit Price:", bg="white").grid(row=0, column=6, sticky="e", pady=5)
-        self.price_entry = tk.Entry(form_frame, width=12)
-        self.price_entry.grid(row=0, column=7, padx=5, sticky="w")
-        self.price_entry.insert(0, "0.00") # Default value para iwas ValueError
+        # Row Control Buttons
+        action_col1, action_col2 = st.columns(2)
+        with action_col1:
+            if st.button("➕ Add Line into Session", type="secondary", use_container_width=True):
+                if not form_desc.strip():
+                    st.error("⚠️ Paki-sulat ang Description ng aytem, boss.")
+                else:
+                    try:
+                        q_val = float(form_qty) if form_qty else 0.0
+                        p_val = float(form_price) if form_price else 0.0
+                        
+                        # I-save sa listahan: [qty, unit, description, price, orig_desc]
+                        # Dahil bagong gawa ito, ang orig_desc ay kapareho lang ng description
+                        st.session_state.new_items_list.append([
+                            q_val, form_unit.strip(), form_desc.strip(), p_val, form_desc.strip()
+                        ])
+                        st.toast("Item added successfully!", icon="➕")
+                        st.rerun()
+                    except ValueError:
+                        st.error("❌ Dapat valid na numero ang ilalagay sa QTY at PRICE, boss.")
+                        
+        with action_col2:
+            if st.button("🧹 Clear Current Session List", use_container_width=True):
+                st.session_state.new_items_list = []
+                st.toast("List cleared!", icon="🗑️")
+                st.rerun()
 
-        self.btn_add_item = tk.Button(form_frame, text="➕ Add to List", bg="#3182ce", fg="white", font=("Segoe UI", 9, "bold"), command=self.add_item_to_list, cursor="hand2")
-        self.btn_add_item.grid(row=0, column=8, padx=15)
-
-        self.price_entry.bind("<Return>", lambda event: self.add_item_to_list())
-        self.qty_entry.bind("<Return>", lambda event: self.add_item_to_list()) # Enter sa Qty field
-
-        # --- TABLE PREVIEW ---
-        table_frame = tk.Frame(self, bg="white")
-        table_frame.pack(fill="both", expand=True, padx=20, pady=10)
-
-        self.tree = ttk.Treeview(table_frame, columns=("No", "Qty", "Unit", "Item Name", "Price", "Total"), show="headings")
-        self.tree.heading("No", text="#")
-        self.tree.heading("Qty", text="Qty")
-        self.tree.heading("Unit", text="Unit")
-        self.tree.heading("Item Name", text="Item Name")
-        self.tree.heading("Price", text="Unit Price")
-        self.tree.heading("Total", text="Total Price")
-        
-        self.tree.column("No", width=40, anchor="center")
-        self.tree.column("Qty", width=60, anchor="center")
-        self.tree.column("Unit", width=80, anchor="center")
-        self.tree.column("Item Name", width=350, anchor="w")
-        self.tree.column("Price", width=100, anchor="e")
-        self.tree.column("Total", width=120, anchor="e")
-        self.tree.pack(fill="both", expand=True, side="left")
-
-        scrollbar = ttk.Scrollbar(table_frame, orient="vertical", command=self.tree.yview)
-        self.tree.configure(yscrollcommand=scrollbar.set)
-        scrollbar.pack(fill="y", side="right")
-
-        # --- SUMMARY PANEL ---
-        summary_frame = tk.Frame(self, bg="#edf2f7", padx=15, pady=10)
-        summary_frame.pack(fill="x", padx=20, pady=5)
-
-        self.lbl_grand_total = tk.Label(summary_frame, text="GRAND TOTAL: P 0.00", font=("Segoe UI", 12, "bold"), fg="#2b6cb0", bg="#edf2f7")
-        self.lbl_grand_total.pack(side="right")
-
-        btn_remove_item = tk.Button(summary_frame, text="🗑️ Remove Selected Item", bg="#e53e3e", fg="white", font=("Segoe UI", 9, "bold"), command=self.remove_selected_item, cursor="hand2")
-        btn_remove_item.pack(side="left")
-
-        # --- ACTION BUTTONS ---
-        actions_frame = tk.Frame(self, bg="#f7fafc")
-        actions_frame.pack(fill="x", padx=20, pady=10)
-
-        self.lbl_counter = tk.Label(actions_frame, text="Total Items: 0 / 150", font=("Segoe UI", 10, "bold"), fg="#4a5568", bg="#f7fafc")
-        self.lbl_counter.pack(side="left")
-
-        btn_save_pow = tk.Button(actions_frame, text="💾 SAVE WHOLE POW", bg="#38a169", fg="white", font=("Segoe UI", 11, "bold"), padx=20, pady=5, command=self.open_project_details_modal, cursor="hand2")
-        btn_save_pow.pack(side="right")
-
-    def trigger_multi_dynamic_search(self, event):
-        typed_text = self.name_entry.get().strip()
-        typed_text_lower = typed_text.lower()
-        
-        if not typed_text:
-            self.close_search_popup()
-            return
-
-        matched_results = db.search_master_items(typed_text)
-        
-        if not matched_results:
-            self.close_search_popup()
+    # --- FINAL SUBMIT & SAVE PIPELINE ---
+    st.markdown("---")
+    save_col1, save_col2 = st.columns([2, 1])
+    
+    with save_col1:
+        if st.button("💾 SAVE NEW POW RECORD & SYNC TO DATABASE", type="primary", use_container_width=True):
+            excel_path = r"G:\jrm\master_items.xlsx"
             
-            register_new = messagebox.askyesno(
-                "Item Not Found", 
-                f"Ang '{typed_text}' ay wala pa sa iyong database.\n\nGusto mo ba itong irehistro bilang BAGONG AYTEM?"
-            )
-            
-            if register_new:
-                self.unit_combobox.focus() # Unang ipapili ang Unit
-                messagebox.showinfo("New Item Mode", "Paki-set ang Unit at Unit Price para sa bagong aytem na ito, pagkatapos ay ilagay ang Qty.")
-            else:
-                self.name_entry.delete(0, tk.END)
-            return
-
-        self.close_search_popup()
-
-        # SMART PRIORITY SORTING ALGORITHM
-        exact_starts = []      
-        five_char_starts = []  
-        somewhere_matches = [] 
-        first_char_starts = [] 
-
-        first_letter = typed_text_lower[0] if len(typed_text_lower) >= 1 else ""
-        first_five = typed_text_lower[:5] if len(typed_text_lower) >= 5 else typed_text_lower
-
-        for item in matched_results:
-            name, unit, price = item[0], item[1], float(item[2])
-            name_lower = name.lower()
-
-            if name_lower.startswith(typed_text_lower):
-                exact_starts.append(item)
-            elif name_lower.startswith(first_five):
-                five_char_starts.append(item)
-            elif typed_text_lower in name_lower:
-                somewhere_matches.append(item)
-            elif first_letter and name_lower.startswith(first_letter):
-                first_char_starts.append(item)
-            else:
-                somewhere_matches.append(item)
-
-        final_sorted_results = exact_starts + five_char_starts + somewhere_matches + first_char_starts
-
-        unique_results = []
-        seen_names = set()
-        for item in final_sorted_results:
-            if item[0] not in seen_names:
-                unique_results.append(item)
-                seen_names.add(item[0])
-
-        final_40_items = unique_results[:40] 
-        total_items = len(final_40_items)
-        listbox_rows = min(total_items, 40)  
-
-        pixel_height = (listbox_rows * 22) + 4
-        if pixel_height > 650: 
-            pixel_height = 650
-
-        x = self.name_entry.winfo_rootx()
-        y = self.name_entry.winfo_rooty() + self.name_entry.winfo_height()
-        width = self.name_entry.winfo_width() + 150
-
-        self.search_popup = tk.Toplevel(self)
-        self.search_popup.wm_overrideredirect(True)
-        self.search_popup.geometry(f"{width}x{pixel_height}+{x}+{y}")
-        self.search_popup.config(bg="#cbd5e0")
-
-        self.listbox = tk.Listbox(
-            self.search_popup, 
-            font=("Segoe UI", 10), 
-            bd=1, 
-            relief="solid", 
-            height=listbox_rows, 
-            selectbackground="#3182ce", 
-            selectforeground="white"
-        )
-        self.listbox.pack(fill="both", expand=True, side="left")
-
-        popup_scroll = ttk.Scrollbar(self.search_popup, orient="vertical", command=self.listbox.yview)
-        self.listbox.configure(yscrollcommand=popup_scroll.set)
-        popup_scroll.pack(fill="y", side="right")
-
-        self.master_items_cache.clear()
-        for item in final_40_items:
-            name, unit, price = item[0], item[1], float(item[2])
-            display_text = f"{name} ({unit}) - P {price:,.2f}"
-            self.listbox.insert(tk.END, display_text)
-            self.master_items_cache[display_text] = {"name": name, "unit": unit, "price": price}
-
-        if final_40_items:
-            self.listbox.selection_set(0)
-            self.listbox.focus_set()
-
-        self.listbox.bind("<Return>", self.on_popup_item_select)
-        self.listbox.bind("<Double-Button-1>", self.on_popup_item_select)
-        self.listbox.bind("<Escape>", lambda e: self.close_search_popup())
-        self.listbox.bind("<F2>", self.back_to_typing_mode)
-        self.search_popup.bind("<FocusOut>", lambda e: self.after(100, self.close_search_popup))
-
-    def on_popup_item_select(self, event=None):
-        try:
-            selected_index = self.listbox.curselection()[0]
-            selected_text = self.listbox.get(selected_index)
-            
-            if selected_text in self.master_items_cache:
-                item_details = self.master_items_cache[selected_text]
-                
-                self.name_entry.delete(0, tk.END)
-                self.name_entry.insert(0, item_details['name'])
-                self.unit_combobox.set(item_details['unit'])
-                
-                self.price_entry.delete(0, tk.END)
-                self.price_entry.insert(0, str(item_details['price']))
-                
-                self.qty_entry.delete(0, tk.END)
-                self.qty_entry.focus() # I-focus ang cursor sa Qty para mabilis mag-type
-                
-                self.close_search_popup()
-        except IndexError:
-            pass
-
-    def close_search_popup(self):
-        if self.search_popup and self.search_popup.winfo_exists():
-            self.search_popup.destroy()
-        self.search_popup = None
-        
-    def back_to_typing_mode(self, event=None):
-        self.close_search_popup()
-        self.name_entry.focus_set()
-        self.name_entry.icursor(tk.END)
-
-    def calculate_totals(self):
-        grand_total = 0.0
-        for item in self.temporary_items:
-            grand_total += item['qty'] * item['price']
-        self.lbl_grand_total.config(text=f"GRAND TOTAL: P {grand_total:,.2f}")
-
-    # 🔥 REVISED & FIX: Ligtas sa ValueError at siguradong papasok sa Table Display
-    def add_item_to_list(self):
-        if len(self.temporary_items) >= 150:
-            messagebox.showwarning("Limit Reached", "Hanggang 150 items lamang ang pwedeng ilagay sa isang POW.")
-            return
-        try:
-            # Kunin at linisin ang input strings
-            raw_qty = self.qty_entry.get().strip()
-            raw_price = self.price_entry.get().strip()
-            name = self.name_entry.get().strip().title()
-            unit = self.unit_combobox.get().strip()
-
-            # Pang-iwas crash: Kung walang tinype, gawing default values
-            qty = int(raw_qty) if raw_qty else 0
-            price = float(raw_price) if raw_price else 0.0
-
-            if not name:
-                messagebox.showwarning("Input Error", "Paki-lagay ang Item Name.")
+            # Validations bago mag-save
+            if not project_name.strip() or not location.strip():
+                st.error("❌ Huwag iwanang blangko ang Project Title at Location, boss.")
+                return
+            if not st.session_state.new_items_list:
+                st.error("❌ Hindi pwedeng mag-save ng walang lamang mga aytem ang POW.")
                 return
 
-            # Check kung bago ang aytem para isulat sa Excel at DB Master list
-            check_exists = db.search_master_items(name)
-            is_new_item = True
-            for item in check_exists:
-                if item[0].lower() == name.lower():
-                    is_new_item = False
-                    break
-            
-            if is_new_item:
-                if hasattr(db, 'add_new_master_item'):
-                    db.add_new_master_item(name, unit, price)
-                
-                excel_path = r"G:\jrm\master_items.xlsx"
+            # 1. EXCEL SYNC ENGINE (Gagana kung local, ligtas laktawan kung cloud)
+            if os.path.exists(excel_path):
                 try:
                     wb = load_workbook(excel_path)
                     ws = wb.active
-                    new_row = ws.max_row + 1
-                    ws.cell(row=new_row, column=1, value=name)
-                    ws.cell(row=new_row, column=2, value=unit)
-                    ws.cell(row=new_row, column=3, value=price)
+                    
+                    for row in st.session_state.new_items_list:
+                        q, u, d, p, orig_d = row[0], row[1], row[2], row[3], row[4]
+                        
+                        # Maghanap kung may kaparehong aytem sa Excel para maiwasan ang duplicate entries sa Master List
+                        target_row = None
+                        for ex_row in range(2, ws.max_row + 1):
+                            cell_val = ws.cell(row=ex_row, column=1).value
+                            if cell_val and str(cell_val).strip().lower() == str(orig_d).strip().lower():
+                                target_row = ex_row
+                                break
+                        
+                        if target_row:
+                            # Kung nagbago ang presyo o unit habang binubuo, i-overwrite sa Excel
+                            ws.cell(row=target_row, column=2, value=u)
+                            ws.cell(row=target_row, column=3, value=p)
+                        else:
+                            # Kung sariwang item, isingit sa pinakailalim ng Excel rows
+                            new_row = ws.max_row + 1
+                            ws.cell(row=new_row, column=1, value=d)
+                            ws.cell(row=new_row, column=2, value=u)
+                            ws.cell(row=new_row, column=3, value=p)
+                            
                     wb.save(excel_path)
                     wb.close()
                 except Exception as e:
-                    print(f"[Excel Sync Warning] {e}")
+                    st.error(f"❌ Excel Sync Error: Nabigong isulat ang data sa {excel_path}. Detalye: {e}")
+                    return
+            else:
+                st.warning("⚠️ Paalala: Walang nahanap na lokal na Excel drive (`G:\\`). Nilaktawan ang Excel sync process.")
 
-            # Siguraduhing naisusulat muna ito sa active temporary array bago ang display
-            self.temporary_items.append({'qty': qty, 'unit': unit, 'name': name, 'price': price})
-            
-            # I-update ang graphical treeview table preview
-            self.refresh_table_display()
-            self.calculate_totals()
+            # 2. SUBPROCESS AUTOMATION AUTOMATIC RUN
+            if os.path.exists(r"G:\jrm"):
+                try:
+                    subprocess.run(["py", "import_master.py"], cwd=r"G:\jrm", check=True, capture_output=True, text=True)
+                except Exception as err:
+                    st.error(f"⚠️ Na-save sa Excel pero may babala sa 'import_master.py'. Detalye: {err}")
+                    return
 
-            # Linisin ang forms para sa susunod na entry
-            self.qty_entry.delete(0, tk.END)
-            self.qty_entry.insert(0, "0")
-            self.name_entry.delete(0, tk.END)
-            self.price_entry.delete(0, tk.END)
-            self.price_entry.insert(0, "0.00")
-            
-            self.name_entry.focus()
-            
-        except ValueError:
-            messagebox.showerror("Input Error", "Dapat tamang numero ang ilagay sa Qty at Unit Price fields.")
+            # 3. SQL DATABASE INSERTION PIPELINE
+            try:
+                # Gagawa muna ng panibagong Project Main Entry sa database at kukunin ang bagong POW ID
+                new_pow_id = db.insert_new_project_main(project_name.strip(), location.strip())
+                
+                if new_pow_id:
+                    # I-extract ang tuple parameters: (qty, unit, description, price)
+                    final_items_to_insert = [(r[0], r[1], r[2], r[3]) for r in st.session_state.new_items_list]
+                    success_items = db.insert_project_items_batch(new_pow_id, final_items_to_insert)
+                    
+                    if success_items:
+                        st.success(f"🎉 Tagumpay! Ang proyektong idinagdag ay rehistrado na sa SQL Database (POW ID: {new_pow_id}).")
+                        # Linisin ang session upang handa sa susunod na transaksyon
+                        st.session_state.new_items_list = []
+                        st.rerun()
+                    else:
+                        st.error("❌ SQL Error: Hindi maipasok ang listahan ng mga aytem sa database.")
+                else:
+                    st.error("❌ SQL Error: Nabigong likhain ang pangunahing record ng proyekto.")
+            except Exception as sql_err:
+                st.error(f"❌ Database Transaction Error: {sql_err}")
 
-    def remove_selected_item(self):
-        selected_row = self.tree.selection()
-        if not selected_row:
-            messagebox.showwarning("No Selection", "Pumili muna ng aalising item sa table sa itaas.")
-            return
-        row_values = self.tree.item(selected_row[0], 'values')
-        item_no = int(row_values[0]) - 1
-        del self.temporary_items[item_no]
-        self.refresh_table_display()
-        self.calculate_totals()
-
-    def refresh_table_display(self):
-        for row in self.tree.get_children():
-            self.tree.delete(row)
-        for index, item in enumerate(self.temporary_items, start=1):
-            total = item['qty'] * item['price']
-            self.tree.insert("", "end", values=(index, item['qty'], item['unit'], item['name'], f"P {item['price']:,.2f}", f"P {total:,.2f}"))
-        self.lbl_counter.config(text=f"Total Items: {len(self.temporary_items)} / 150")
-
-    def open_project_details_modal(self):
-        if not self.temporary_items:
-            messagebox.showwarning("Empty List", "Maglagay muna ng item bago i-save.")
-            return
-        self.modal = tk.Toplevel(self)
-        self.modal.title("Finalize POW Details")
-        self.modal.geometry("400x250")
-        self.modal.transient(self.winfo_toplevel())
-        self.modal.grab_set()
-
-        modal_frame = tk.Frame(self.modal, padx=20, pady=20)
-        modal_frame.pack(fill="both", expand=True)
-
-        tk.Label(modal_frame, text="Ipasok ang Pangwakas na Detalye", font=("Segoe UI", 12, "bold"), fg="#1a365d").pack(pady=(0, 15))
-        tk.Label(modal_frame, text="Project Name:").pack(anchor="w")
-        self.proj_name_entry = tk.Entry(modal_frame, width=50)
-        self.proj_name_entry.pack(pady=5)
-
-        tk.Label(modal_frame, text="Location:").pack(anchor="w")
-        self.location_entry = tk.Entry(modal_frame, width=50)
-        self.location_entry.pack(pady=5)
-
-        btn_confirm = tk.Button(modal_frame, text="Confirm & Save to MySQL", bg="#38a169", fg="white", font=("Segoe UI", 10, "bold"), pady=5, command=self.save_to_database)
-        btn_confirm.pack(fill="x", pady=15)
-
-    def save_to_database(self):
-        project_name = self.proj_name_entry.get().strip().title()
-        location = self.location_entry.get().strip().title()
-
-        if not project_name or not location:
-            messagebox.showwarning("Kulang", "Ipasok ang Project Name at Location.")
-            return
-
-        success = db.save_pow_to_sql(project_name, location, self.temporary_items)
-        if success:
-            messagebox.showinfo("Success", "Matagumpay na nai-save ang POW!")
-            self.modal.destroy()
-            self.temporary_items = []
-            self.refresh_table_display()
-            self.lbl_grand_total.config(text="GRAND TOTAL: P 0.00")
-        else:
-            messagebox.showerror("Database Error", "Nagka-error sa pag-save sa MySQL.")
+    with save_col2:
+        if st.button("🔄 Reset Form", use_container_width=True):
+            st.session_state.new_items_list = []
+            st.rerun()
