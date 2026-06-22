@@ -407,3 +407,19 @@ def get_all_pow_history():
     finally:
         if 'cursor' in locals(): cursor.close()
         if conn and conn.is_connected(): conn.close()
+
+def get_all_master_items():
+    """Kukuha ng lahat ng materyales para sa autocomplete dropdown"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        # Kukunin ang description, unit, at price na naka-ayos mula A-Z
+        cursor.execute("SELECT description, unit, unit_price FROM master_items ORDER BY description ASC")
+        records = cursor.fetchall()
+        return records
+    except Exception as e:
+        print(f"Error sa pagkuha ng master items: {e}")
+        return []
+    finally:
+        cursor.close()
+        conn.close()
