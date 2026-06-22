@@ -81,8 +81,9 @@ class OfficeDashboard:
             st.info("Encoding Area - Add New POW Module Connected.")
             
         elif st.session_state.active_view == "Preview POW Records":
+            # Hanapin ang line 84 o ang itaas na bahagi ng iyong dashboard.py kung saan ka nag-iimport
             from modules.pow.preview_pow import render_preview_pow_module
-            render_preview_pow_module()
+            from modules.pow.add_pow import render_add_pow_module  # 👈 IDAGDAG ITONG LINYANG ITO
                 
         elif st.session_state.active_view == "POW Masterlist History":
             st.info("Office Records - POW Masterlist History Connected.")
