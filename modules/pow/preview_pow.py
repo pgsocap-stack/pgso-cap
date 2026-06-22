@@ -121,7 +121,6 @@ def render_preview_pow_module():
         btn_col1, btn_col2 = st.columns(2)
         with btn_col1:
             if st.button("👁️ Preview Data Layout", type="primary", use_container_width=True):
-                # Lumipat sa tab o module kung saan naroon ang iyong excel preview generator
                 st.session_state.active_view = "Preview POW Records"
                 st.toast("Inililipat ka sa Excel Preview View...", icon="👁️")
                 
@@ -129,7 +128,6 @@ def render_preview_pow_module():
             if st.button("✏️ Edit POW Record", use_container_width=True):
                 st.session_state.edit_project_name = project_name
                 st.session_state.edit_location = location
-                # Format: [qty, unit, description, price, orig_desc]
                 st.session_state.edit_items_list = [
                     [item[0], item[1], item[2], float(item[3]), item[2]] for item in associated_items
                 ]
@@ -138,11 +136,29 @@ def render_preview_pow_module():
 
 
 # ==============================================================================
-# ✏️ INTERNAL MODULE: THE EDIT MODE INTERFACE (Immersed Modal Emulation)
+# ✏️ INTERNAL MODULE: THE EDIT MODE INTERFACE (Smarter Row Modification)
 # ==============================================================================
 def render_edit_mode_interface():
     st.markdown("### ✏️ EDIT MODE - Update POW Record")
     
+    # Kumuha ng master suggestions list mula sa iyong DB o Excel layer para sa autocomplete
+    try:
+        # BUMABASA SA DATABASE MO: Inaasahang magbabalik ng listahan ng tuples: (description, unit, price)
+        master_items_pool = db.get_master_items_suggestions()
+    except Exception:
+        # Fallback dataset kung inaayos pa ang function sa db.py
+        master_items_pool = [
+            ("Portland Cement (Type 1)", "bags", 285.00),
+            ("Reinforcing Steel Bars 12mm", "pcs", 310.00),
+            ("Fine Sand", "cu.m", 1200.00),
+            ("Gravel 3/4", "cu.m", 1400.00),
+            ("Ready-Mix Concrete 3000 PSI", "cu.m", 4500.00)
+        ]
+
+    # Gawing diksyunaryo para sa mabilisang auto-fill routing
+    # Format: { "Description": {"unit": "pcs", "price": 100.00} }
+    suggestions_dict = {item[0]: {"unit": item[1], "price": float(item[2])} for item in master_items_pool}
+
     # --- UPPER FRAME: DETAILS ---
     with st.container(border=True):
         st.markdown("**Details of POW**")
@@ -163,7 +179,7 @@ def render_edit_mode_interface():
         })
     st.dataframe(display_edit_rows, use_container_width=True, hide_index=True)
 
-    # --- FORM INPUTS FOR ROWS ---
+    # --- FORM INPUTS FOR ROWS WITH SMART SEARCH AUTOSUGGEST ---
     with st.container(border=True):
         st.markdown("**Row Modification Form**")
         
@@ -177,13 +193,41 @@ def render_edit_mode_interface():
             target_row = st.session_state.edit_items_list[idx]
             init_qty, init_unit, init_desc, init_price, init_orig = target_row[0], target_row[1], target_row[2], target_row[3], target_row[4]
 
+        # 🔥 SMART AUTOSUGGEST SEARCH LAYER:
+        # Pwede silang mag-type, at kapag pinindot ang enter o pinili ang aytem, automatic na magbabago ang katabi nitong mga text inputs
+        st.markdown("<small style='color: gray;'>🔍 Type to search existing item templates from office master list:</small>", unsafe_allow_html=True)
+        
+        # Isasama natin ang kasalukuyang nakasulat (init_desc) sa mga opsyon kung wala ito sa master list
+        dropdown_options = list(suggestions_dict.keys())
+        if init_desc and init_desc not in dropdown_options:
+            dropdown_options.insert(0, init_desc)
+        dropdown_options.insert(0, "Custom Entry / Manu-manong Isusulat")
+
+        # Ang selectbox ng Streamlit ay may built-in "type-to-search" capability sa web
+        selected_suggestion = st.selectbox(
+            "Smart Search Item Masterlist:",
+            options=dropdown_options,
+            index=dropdown_options.index(init_desc) if init_desc in dropdown_options else 0,
+            label_visibility="collapsed"
+        )
+
+        # Kung may napiling valid item sa master list, automatic nitong i-ooverwrite ang variables
+        if selected_suggestion != "Custom Entry / Manu-manong Isusulat":
+            final_desc = selected_suggestion
+            if selected_suggestion in suggestions_dict:
+                init_unit = suggestions_dict[selected_suggestion]["unit"]
+                init_price = suggestions_dict[selected_suggestion]["price"]
+        else:
+            final_desc = init_desc
+
+        # --- GRID CONTROLLERS FOR ENTRY ---
         f_col1, f_col2, f_col3, f_col4 = st.columns([1, 1, 3, 1.5])
         with f_col1:
             form_qty = st.text_input("QTY:", value=str(init_qty), key="form_qty")
         with f_col2:
             form_unit = st.text_input("UNIT:", value=str(init_unit), key="form_unit")
         with f_col3:
-            form_desc = st.text_input("DESCRIPTION:", value=str(init_desc), key="form_desc")
+            form_desc = st.text_input("DESCRIPTION (Final):", value=str(final_desc), key="form_desc", help="Pwede mong baguhin o i-override ang pangalan dito.")
         with f_col4:
             form_price = st.text_input("PRICE:", value=str(init_price), key="form_price")
 
@@ -231,7 +275,7 @@ def render_edit_mode_interface():
                 st.error("Huwag iwanang blangko ang Name at Location, boss.")
                 return
 
-            # 1. EXCEL OVERWRITE ENGINE (Gagana kapag lokal ang takbo)
+            # 1. EXCEL OVERWRITE ENGINE
             if os.path.exists(excel_path):
                 try:
                     wb = load_workbook(excel_path)
@@ -263,7 +307,6 @@ def render_edit_mode_interface():
                     st.error(f"❌ Excel Sync Error: Hindi mai-save ang data sa {excel_path}. Detalye: {e}")
                     return
             else:
-                # Pag nasa cloud, babasahin ito para magpatuloy ang SQL save nang walang crash
                 st.warning("⚠️ Paalala: Walang nahanap na lokal na Excel drive (`G:\\`). Nilaktawan ang Excel overwrite block.")
 
             # 2. SUBPROCESS SCRIPT INTEGRATION
