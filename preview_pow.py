@@ -174,6 +174,7 @@ def render_edit_mode_interface():
         edit_location = st.text_input("Project Location:", value=st.session_state.edit_location)
 
     # --- MIDDLE FRAME: TABLE PREVIEW ---
+  # --- MIDDLE FRAME: TABLE PREVIEW ---
     st.markdown("**List of Items (Current Session)**")
     display_edit_rows = []
     for idx, row in enumerate(st.session_state.edit_items_list):
@@ -187,86 +188,74 @@ def render_edit_mode_interface():
         })
     st.dataframe(display_edit_rows, use_container_width=True, hide_index=True)
 
-    # --- FORM INPUTS FOR ROWS WITH AUTOSUGGEST ---
+
+    # ==============================================================================
+    # 🎯 DITO NATIN IPAPATONG ANG BINIGAY MONG CODE (May tamang Tab/Indentation)
+    # ==============================================================================
+    
+    # Kukunin ang lahat ng pangalan ng materyales mula sa master_pool (na nakuha sa taas ng function)
+    dropdown_options = list(master_pool.keys())
+    dropdown_options.insert(0, "✨ Manu-manong Isusulat (Custom Entry) / Pumili sa ibaba...")
+
+    st.markdown("### ➕ Magdagdag ng Bagong Aytem sa POW")
+
+    # Wrapper container para malinis tingnan sa screen
     with st.container(border=True):
-        st.markdown("**Row Modification Form**")
         
-        line_options = ["➕ ADD NEW LINE"] + [f"Line {i+1}: {row[2][:30]}..." for i, row in enumerate(st.session_state.edit_items_list)]
-        selected_line_idx = st.selectbox("Pumili ng linyang babaguhin o magdagdag:", options=line_options)
-        
-        if selected_line_idx == "➕ ADD NEW LINE":
-            init_qty, init_unit, init_desc, init_price, init_orig = "", "", "", "", ""
-        else:
-            idx = int(selected_line_idx.split(":")[0].replace("Line ", "")) - 1
-            target_row = st.session_state.edit_items_list[idx]
-            init_qty, init_unit, init_desc, init_price, init_orig = target_row[0], target_row[1], target_row[2], target_row[3], target_row[4]
-
-        # 🔍 SMART DROPDOWN SEARCH ENGINE
-        st.markdown("<small style='color: gray;'>🔍 I-type dito ang pangalan ng materyales para mag-search sa master list:</small>", unsafe_allow_html=True)
-        
-        dropdown_options = list(suggestions_dict.keys())
-        if init_desc and init_desc not in dropdown_options:
-            dropdown_options.insert(0, init_desc)
-        dropdown_options.insert(0, "Custom Entry / Manu-manong Isusulat")
-
-        selected_suggestion = st.selectbox(
-            "Smart Search Item Masterlist:",
+        # 🔍 ANG SMART SEARCH TEXT BOX/DROPDOWN
+        selected_item = st.selectbox(
+            "Mag-search o Pumili ng Materyales (Item Description):",
             options=dropdown_options,
-            index=dropdown_options.index(init_desc) if init_desc in dropdown_options else 0,
-            label_visibility="collapsed"
+            index=0
         )
+        
+        default_unit = ""
+        default_price = 0.00
+        chosen_desc = ""
+        
+        if selected_item != "✨ Manu-manong Isusulat (Custom Entry) / Pumili sa ibaba...":
+            chosen_desc = selected_item
+            default_unit = master_pool[selected_item]["unit"]
+            default_price = master_pool[selected_item]["price"]
 
-        # Kung pumili sila ng aytem sa listahan, kusa nitong hihilahin ang Unit at Price
-        if selected_suggestion != "Custom Entry / Manu-manong Isusulat":
-            final_desc = selected_suggestion
-            if selected_suggestion in suggestions_dict:
-                init_unit = suggestions_dict[selected_suggestion]["unit"]
-                init_price = suggestions_dict[selected_suggestion]["price"]
+        # Grid layout para magkakatabi ang mga input fields
+        col1, col2, col3 = st.columns([1, 1, 1.5])
+        
+        with col1:
+            input_qty = st.number_input("QTY (Dami):", min_value=0.0, step=1.0, value=0.0, key="enc_qty")
+            
+        with col2:
+            input_unit = st.text_input("UNIT:", value=default_unit, key="enc_unit")
+            
+        with col3:
+            input_price = st.number_input("UNIT PRICE (Presyo):", min_value=0.0, step=0.01, value=default_price, key="enc_price")
+
+        if selected_item == "✨ Manu-manong Isusulat (Custom Entry) / Pumili sa ibaba...":
+            final_description = st.text_input("Isulat ang Pangalan ng Custom Material dito, boss:", key="enc_custom_desc")
         else:
-            final_desc = init_desc
+            final_description = chosen_desc
 
-        # --- GRID CONTROLLERS FOR ENTRY ---
-        f_col1, f_col2, f_col3, f_col4 = st.columns([1, 1, 3, 1.5])
-        with f_col1:
-            form_qty = st.text_input("QTY:", value=str(init_qty), key="form_qty")
-        with f_col2:
-            form_unit = st.text_input("UNIT:", value=str(init_unit), key="form_unit")
-        with f_col3:
-            form_desc = st.text_input("DESCRIPTION (Final):", value=str(final_desc), key="form_desc")
-        with f_col4:
-            form_price = st.text_input("PRICE:", value=str(init_price), key="form_price")
-
-        action_col1, action_col2 = st.columns(2)
-        with action_col1:
-            if st.button("🔄 Update Selected Line", use_container_width=True, type="secondary"):
-                if selected_line_idx == "➕ ADD NEW LINE":
-                    st.error("Pumili muna ng valid na Line number para ma-update, boss.")
-                else:
-                    try:
-                        idx = int(selected_line_idx.split(":")[0].replace("Line ", "")) - 1
-                        st.session_state.edit_items_list[idx] = [
-                            float(form_qty), form_unit, form_desc.strip(), float(form_price), init_orig
-                        ]
-                        st.toast("Linya matagumpay na binago!", icon="🔄")
-                        st.rerun()
-                    except ValueError:
-                        st.error("Dapat valid na numero ang QTY at PRICE, boss.")
-                        
-        with action_col2:
-            if st.button("➕ Add Line into Session List", use_container_width=True):
-                if not form_desc.strip():
-                    st.error("Lagyan ng Description ang bagong aytem, boss.")
-                else:
-                    try:
-                        q_val = float(form_qty) if form_qty else 0.0
-                        p_val = float(form_price) if form_price else 0.0
-                        st.session_state.edit_items_list.append([
-                            q_val, form_unit, form_desc.strip(), p_val, form_desc.strip()
-                        ])
-                        st.toast("Bagong linya idinagdag sa listahan!", icon="➕")
-                        st.rerun()
-                    except ValueError:
-                        st.error("Dapat valid na numero ang QTY at PRICE, boss.")
+        # --- BUTTON PARA SA PAGPAPASOK SA KASALUKUYANG SESSION LIST ---
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("➕ Isama sa Listahan ng Materyales", use_container_width=True, type="primary"):
+            if not final_description.strip():
+                st.error("⚠️ Error: Hindi pwedeng iwanang blangko ang Description ng materyales, boss!")
+            elif input_qty <= 0:
+                st.warning("⚠️ Paalala: Siguraduhing ang QTY ay higit sa 0 para ma-compute ang amount.")
+            else:
+                if 'edit_items_list' not in st.session_state:
+                    st.session_state.edit_items_list = []
+                    
+                st.session_state.edit_items_list.append([
+                    float(input_qty), 
+                    input_unit.strip(), 
+                    final_description.strip(), 
+                    float(input_price), 
+                    final_description.strip()
+                ])
+                
+                st.toast(f"🎉 Naidagdag na sa listahan: {final_description.strip()}", icon="✅")
+                st.rerun()
 
     # --- FINAL SAVE OVERWRITE PIPELINE (Malinis na SQL Only nang walang pasabog sa Cloud)
     st.markdown("---")
