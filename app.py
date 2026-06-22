@@ -97,6 +97,9 @@ def show_dashboard():
     # ==============================================================================
     from dashboard import OfficeDashboard
     
-    # Dito natin ipinapasa ang session parameters diretso sa Streamlit OfficeDashboard layer
+    # Siguraduhing pantay ang indentation at walang sumobrang spaces sa parenthesis
     OfficeDashboard(
-        username=st.session
+        username=st.session_state.username,
+        user_role=st.session_state.user_role,
+        on_logout=handle_web_logout
+    )
