@@ -1,43 +1,51 @@
 import streamlit as st
-
-# SIGURADUHIN NA MERONG GANITO SA PINAKA-TAAS NG APP.PY:
-if 'active_view' not in st.session_state:
-    st.session_state.active_view = "login"  # O kung ano man ang default view mo
-
-# Kung gumagamit ka ng page role o state checker na tinatawag na 'dashboard'
-if 'dashboard' not in st.session_state:
-    st.session_state['dashboard'] = {}  # I-initialize bilang blangkong dictionary para hindi mag-KeyError
 import db  # Gagamitin ang kinopya mong db.py sa parehong folder
 
-# I-configure ang web page setting para maging professional, responsive at maximized ang layout sa computer screens
+# 🌟 RULE 1 NG STREAMLIT: Dapat ito ang PINAKA-UNANG 'st.' command sa script!
 st.set_page_config(
     page_title="PGSO Management System",
     page_icon="🏛️",
-    layout="wide",  # Ginagawa nitong maximized ang screen katulad ng self.parent.state('zoomed') sa Tkinter
+    layout="wide",  # Ginagawa nitong maximized ang screen katulad ng zoomed sa Tkinter
     initial_sidebar_state="expanded"
 )
 
-# 1. I-initialize ang database sa unang load ng website
+# ==============================================================================
+# INITIALIZATION NG LAHAT NG SESSION STATES (Proteksyon sa KeyError)
+# ==============================================================================
+if 'active_view' not in st.session_state:
+    st.session_state.active_view = "login"
+
+if 'dashboard' not in st.session_state:
+    st.session_state['dashboard'] = {}  # Solusyon para hindi na magka-KeyError sa dashboard.py
+
+if 'page' not in st.session_state:
+    st.session_state.page = 'login'
+
+if 'username' not in st.session_state:
+    st.session_state.username = None
+
+if 'user_role' not in st.session_state:
+    st.session_state.user_role = None
+
+# I-initialize ang database sa unang load ng website
 if 'db_ready' not in st.session_state:
     db.initialize_db()
     st.session_state.db_ready = True
 
-# 2. State management para sa paglipat-lipat ng screen at user sessions
-if 'page' not in st.session_state:
-    st.session_state.page = 'login'
-if 'username' not in st.session_state:
-    st.session_state.username = None
-if 'user_role' not in st.session_state:
-    st.session_state.user_role = None
 
-# --- MGA TRIGGERS O FUNCTIONS PARA SA LOGOUT ---
+# ==============================================================================
+# 🎛️ MGA TRIGGERS / HANDLERS
+# ==============================================================================
 def handle_web_logout():
     st.session_state.page = 'login'
     st.session_state.username = None
     st.session_state.user_role = None
     st.rerun()
 
-# --- MGA PALANDINGAN O PAHINGA NG WEB APP (SCREENS) ---
+
+# ==============================================================================
+# 🏛️ MGA PALANDINGAN NG WEB APP (SCREENS)
+# ==============================================================================
 
 def show_login():
     st.markdown("<h2 style='text-align: center; color: #2196F3;'>ACCOUNT LOGIN</h2>", unsafe_allow_html=True)
@@ -45,18 +53,15 @@ def show_login():
     username = st.text_input("Username", key="login_user").strip()
     password = st.text_input("Password", type="password", key="login_pass").strip()
     
-    # Login button layout
     if st.button("Login", use_container_width=True, type="primary"):
         if not username or not password:
             st.warning("⚠️ Attention! All input fields must be filled out before proceeding")
         else:
-            # 🔍 Bumabase sa authenticate_user function mo sa db.py
             user_role = db.authenticate_user(username, password)
             
             if user_role:
                 st.toast("🎉 Success! Access Granted. Login successful.")
                 st.session_state.username = username
-                # Kung True ang binalik pero string ang kailangan (tulad ng 'admin' o 'encoder'/'staff')
                 st.session_state.user_role = "admin" if username.lower() == "admin" else "staff"
                 st.session_state.page = 'dashboard'
                 st.rerun()
@@ -64,7 +69,6 @@ def show_login():
                 st.error("❌ Login Failed! Invalid username or password. Please try again.")
                 
     st.markdown("---")
-    # Link papuntang Sign Up
     if st.button("Don't have an account? Sign Up", use_container_width=True):
         st.session_state.page = 'signup'
         st.rerun()
@@ -80,7 +84,6 @@ def show_signup():
         if not username or not password:
             st.warning("⚠️ Attention! All fields are required to register an account.")
         else:
-            # 🔍 Tinatawag ang register function mo mula sa db.py (Siguraduhing mayroon ka nito sa db.py)
             try:
                 success, message = db.register_user(username, password, role='encoder')
                 if success:
@@ -89,23 +92,18 @@ def show_signup():
                 else:
                     st.error(f"❌ Registration Failed! {message}")
             except AttributeError:
-                # Fallback handler kung sakaling hindi pa rehistrado ang register function sa db.py mo
-                st.info("⏳ Access request submitted. Form locked for database synchronization validation.")
+                st.info("⏳ Access request submitted. Form logged for database synchronization validation.")
                 
     st.markdown("---")
-    # Link pabalik ng Login
     if st.button("Already have an account? Log In", use_container_width=True):
         st.session_state.page = 'login'
         st.rerun()
 
 
 def show_dashboard():
-    # ==============================================================================
-    # 🎛️ INTEGRATION HUB: TINAWAG NA ANG WEB VERSION NG DASHBOARD MO
-    # ==============================================================================
+    # Dynamic import para hindi mag-conflict habang nilo-load ang page state
     from dashboard import OfficeDashboard
     
-    # Dito natin ipinapasa ang session parameters diretso sa Streamlit OfficeDashboard layer
     OfficeDashboard(
         username=st.session_state.username,
         user_role=st.session_state.user_role,
@@ -113,16 +111,17 @@ def show_dashboard():
     )
 
 
-    # --- APP CONTROLLER (Katulad ng AppController class mo sa Tkinter) ---
-    # Pinananatili itong walang side-effect para kapag dashboard ang active, gumana ang sidebar nito nang buo.
-    if st.session_state.page == 'login' or st.session_state.page == 'signup':
+# ==============================================================================
+# 🎮 MAIN APP CONTROLLER (May Tamang Indentation at Spacing na)
+# ==============================================================================
+if st.session_state.page == 'login' or st.session_state.page == 'signup':
     _, center_col, _ = st.columns([1, 2, 1])
-        with center_col:
-            with st.container(border=True): # Malinis na card wrapper para sa logging pages
-                if st.session_state.page == 'login':
+    with center_col:
+        with st.container(border=True):  # Malinis na card wrapper para sa logging pages
+            if st.session_state.page == 'login':
                 show_login()
-                elif st.session_state.page == 'signup':
+            elif st.session_state.page == 'signup':
                 show_signup()
-    else:
-        # Kapag 'dashboard' na ang active, hinahayaan nating sakupin ang buong screen para gumana ang structural sidebar
-        show_dashboard()
+else:
+    # Kapag 'dashboard' na ang active, pinapagana ang buong dashboard screen
+    show_dashboard()
