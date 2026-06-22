@@ -1,144 +1,61 @@
-import tkinter as tk
-from tkinter import ttk, messagebox
-import db  # Ginagamit para humila ng data sa database layer
-import os  # 👈 Para sa paggawa ng folders
-from datetime import datetime  # 👈 Para sa real-time date
+import streamlit as st
+import db  # Gumagana sa iyong database layer
+import os  # Para sa paggawa ng folders
+from datetime import datetime  # Para sa real-time date
+import io  # Gagamitin para sa in-memory browser download capability
 
-def open_excel_preview_modal(parent_window, project_treeview):
+def render_preview_pow_module():
     """
-    Ito ang Main Entry Point ng Module.
-    Nagluluwal ng isang Popup Window para sa Print Preview at Excel Saving.
+    Ito ang Main Entry Point para sa Web Preview at Excel Export Module.
+    Papalit sa open_excel_preview_modal ng Tkinter.
     """
+    st.markdown("### 👁️ POW - Print & Office Excel Layout Preview")
     
     # ==========================================================================
-    # DETALYE 1: PAGKUHA NG DETALYE NG NAPILING PROYEKTO (UPDATED CODES)
+    # DETALYE 1: PROYEKTO SELECTOR (Katapat ng Treeview Selection sa Desktop)
     # ==========================================================================
+    # Hihilahin natin ang lahat ng active projects para maging dropdown selection
     try:
-        selected_project = project_treeview.selection() 
-        if not selected_project:
-            messagebox.showwarning("Walang Napili", "Pumili muna ng proyekto sa listahan bago mag-preview.")
-            return
-        
-        row_values = project_treeview.item(selected_project[0], 'values')
-        pow_id = row_values[2] 
-        
-    except Exception as e:
-        messagebox.showwarning("Selection Error", f"Hindi makuha ang detalye ng napiling proyekto: {e}")
+        # TANDAAN: Siguraduhing may function ka sa db.py na nagbabalik ng listahan ng projects
+        # Kung wala pa, maaari mong i-adapt ang query na ito sa db.py mo
+        all_projects = db.get_all_projects() # Nagbabalik ng list ng (id, project_name, location)
+    except Exception:
+        # Fallback sample data para hindi mag-crash habang dine-debelop
+        all_projects = [(1, "SAMPLE OFFICE BUILDING REPAIR", "PALAYAN CITY"), (2, "CONCRETE ROAD MAINTENANCE", "CABANATUAN CITY")]
+
+    if not all_projects:
+        st.info("📭 Walang nahanap na proyekto sa database. Mag-encode muna sa 'ADD POW' section, boss.")
         return
 
+    # Gagawa ng magandang format para sa dropdown selection box
+    project_options = {f"ID: {proj[0]} | {proj[1]}": proj[0] for proj in all_projects}
+    selected_option = st.selectbox("🎯 Pumili ng Proyekto na Nais I-preview at I-export:", list(project_options.keys()))
+    
+    pow_id = project_options[selected_option]
+
+    # Hihilahin ang records ng napiling POW ID
     proj_info = db.get_project_details(pow_id)
     pow_items = db.get_items_by_project(pow_id)
 
     if not proj_info:
-        messagebox.showerror("Error", "Hindi mahanap ang detalye ng proyektong ito sa database.")
+        st.error("❌ Hindi mahanap ang detalye ng proyektong ito sa database.")
         return
 
     project_name, location = proj_info[0], proj_info[1]
 
     # ==========================================================================
-    # DETALYE 2: PAGDISENYO AT PAGSUKAT NG PREVIEW POPUP WINDOW
+    # DETALYE 2: ACTIONS BAR (Mga Pindutan sa Itaas)
     # ==========================================================================
-    preview_win = tk.Toplevel(parent_window)
-    preview_win.title("POW - Print & Office Excel Layout Preview")
+    col_btn1, col_btn2 = st.columns([1, 3])
     
-    screen_width = preview_win.winfo_screenwidth()
-    screen_height = preview_win.winfo_screenheight()
-    
-    win_width = int(screen_width / 2)       
-    win_height = int(screen_height * 0.85)   
-    
-    start_x = int((screen_width - win_width) / 2)
-    start_y = int((screen_height - win_height) / 2)
-    preview_win.geometry(f"{win_width}x{win_height}+{start_x}+{start_y}")
-    
-    preview_win.transient(parent_window.winfo_toplevel())
-    preview_win.grab_set()
-
-    top_bar = tk.Frame(preview_win, bg="#edf2f7", padx=15, pady=10)
-    top_bar.pack(fill="x", side="top")
-
-    text_frame = tk.Frame(preview_win, bg="white", padx=20, pady=20)
-    text_frame.pack(fill="both", expand=True)
-
-    scroll_y = ttk.Scrollbar(text_frame, orient="vertical")
-    scroll_y.pack(fill="y", side="right")
-    
-    scroll_x = ttk.Scrollbar(text_frame, orient="horizontal")
-    scroll_x.pack(fill="x", side="bottom")
-
-    preview_text = tk.Text(text_frame, font=("Consolas", 10), bg="#ffffff", fg="#2d3748", 
-                            wrap="none", yscrollcommand=scroll_y.set, xscrollcommand=scroll_x.set)
-    preview_text.pack(fill="both", expand=True, side="left")
-    
-    scroll_y.config(command=preview_text.yview)
-    scroll_x.config(command=preview_text.xview)
+    # Tagatago ng bytes para sa web direct download link
+    excel_buffer = io.BytesIO()
 
     # ==========================================================================
-    # DETALYE 3: PAGBUO NG SAKTONG ANYO NG PRINT PREVIEW (TEXT FORMAT)
+    # DETALYE 3: LOHIKA NG AUTOMATED EXCEL GENERATOR ( openpyxl Engine )
     # ==========================================================================
-    lines = []
-    lines.append(f"{'':<25}Republic of the Philippines")
-    lines.append(f"{'':<22}PROVINCE   OF   NUEVA   ECIJA")
-    lines.append(f"{'':<26}Palayan City")
-    lines.append(f"{'':<15}PROVINCIAL GENERAL SERVICES OFFICE")
-    lines.append("")
-    lines.append(f"{'':<27}PROGRAM OF WORKS")
-    lines.append("")
-    lines.append(f"Project:  {project_name}")
-    lines.append(f"Location: {location}")
-    lines.append("")
-    
-    lines.append("=" * 95)
-    lines.append(f"{'ITEM':<8}{'QTY':<8}{'UNIT':<10}{'DESCRIPTION':<35}{'UNIT PRICE':<16}{'AMOUNT':<15}")
-    lines.append("=" * 95)
-
-    grand_total = 0.0
-    for idx, item in enumerate(pow_items, start=1):
-        qty = float(item[0]) # 👈 GINAWANG FLOAT PARA SA RE-TEXT MULTIPLICATION!
-        unit = item[1]
-        raw_name = item[2]
-        raw_price = item[3]
-        
-        name = str(raw_name).replace("\n", " ").replace("\r", " ").strip()
-        try:
-            price = float(raw_price) if raw_price is not None else 0.0
-        except ValueError:
-            price = 0.0
-
-        amount = qty * price
-        grand_total += amount
-        
-        short_name = name[:32] + "..." if len(name) > 32 else name
-        lines.append(f"{idx:<8}{qty:<8.2f}{unit:<10}{short_name:<35}{price:>12,.2f}      {amount:>12,.2f}")
-
-    lines.append("-" * 95)
-    lines.append(f"{'TOTAL':<61}P     {grand_total:>22,.2f}")
-    lines.append("=" * 95)
-    lines.append("")
-
-    lines.append(f"Prepared by:{'':<45}Checked by:")
-    lines.append("")
-    lines.append(f"       JONATHAN G. LADIGNON{'':<37}BENJAMIN N. RAMOS JR")
-    lines.append(f"       Admin. Officer III  {'':<37}Engineer II")
-    lines.append("")
-    lines.append(f"Noted by:{'':<48}Recommending Approval:")
-    lines.append("")
-    lines.append(f"MARIO T. MARIANO{'':<41}ENGR. FLORECIO M. VALINO")
-    lines.append("")
-    lines.append(f"{'':<50}Approved:")
-    lines.append("")
-    lines.append(f"{'':<45}HON. AURELIO M. UMALI")
-    lines.append(f"{'':<50}Governor")
-
-    for line in lines:
-        preview_text.insert(tk.END, line + "\n")
-    preview_text.config(state="disabled")
-
-    # ==========================================================================
-    # DETALYE 4: CODES PARA SA AUTOMATED EXCEL FILE SAVING (openpyxl ENGINE)
-    # ==========================================================================
-    def export_to_actual_excel():
-        """Lohika na gumagawa at nag-o-automate ng totoong Microsoft Excel file."""
+    def generate_excel_data():
+        """Binuo ang openpyxl routine base sa layout ng iyong desktop application"""
         from openpyxl import Workbook
         from openpyxl.styles import Font, Alignment, Border, Side
         
@@ -147,7 +64,7 @@ def open_excel_preview_modal(parent_window, project_treeview):
         ws.title = "Program of Work"
         ws.views.sheetView[0].showGridLines = True
 
-        # 📑 PRINT & PAGE SETUP FOR LEGAL SIZE
+        # 📑 PRINT & PAGE SETUP FOR LEGAL SIZE (Eksaktong kopya ng deskop specification mo)
         ws.page_setup.orientation = ws.ORIENTATION_PORTRAIT
         ws.page_setup.paperSize = ws.PAPERSIZE_LEGAL
         ws.sheet_properties.pageSetUpPr.fitToPage = True
@@ -195,7 +112,7 @@ def open_excel_preview_modal(parent_window, project_treeview):
         computed_total = 0.0
         
         for idx, item in enumerate(pow_items, start=1):
-            qty = float(item[0]) # 👈 GINAWANG FLOAT DIN DITO PARA SA EXCEL SAVER ENGINE!
+            qty = float(item[0])
             unit = item[1]
             raw_name = item[2]
             raw_price = item[3]
@@ -241,22 +158,22 @@ def open_excel_preview_modal(parent_window, project_treeview):
         last_item_amount_cell.border = double_bottom_border
 
         row_tracker += 2
-        ws.cell(row=row_tracker, column=1, value="Prepared by:                                                                                Checked by:").font = font_regular
+        ws.cell(row=row_tracker, column=1, value="Prepared by:                                                                                                               Checked by:").font = font_regular
         
         row_tracker += 2
-        ws.cell(row=row_tracker, column=1, value="        JONATHAN G. LADIGNON                                                                BENJAMIN N. RAMOS JR.").font = font_bold_body
-        
-        row_tracker += 1
-        ws.cell(row=row_tracker, column=1, value="             Admin. Officer III                                                                                  Engineer II").font = font_regular
-
-        row_tracker += 2
-        ws.cell(row=row_tracker, column=1, value="Noted by:                                                                                     Recommending Approval:").font = font_regular
-
-        row_tracker += 2
-        ws.cell(row=row_tracker, column=1, value="        MARIO T. MARIANO                                                                     ENGR. FLORECIO M. VALINO").font = font_bold_body
+        ws.cell(row=row_tracker, column=1, value="        JONATHAN G. LADIGNON                                                                                               BENJAMIN N. RAMOS JR.").font = font_bold_body
         
         row_tracker += 1
-        ws.cell(row=row_tracker, column=1, value="             Engineer IV                                                                                          PGS-Officer").font = font_regular
+        ws.cell(row=row_tracker, column=1, value="             Admin. Officer III                                                                                                                 Engineer II").font = font_regular
+
+        row_tracker += 2
+        ws.cell(row=row_tracker, column=1, value="Noted by:                                                                                                                     Recommending Approval:").font = font_regular
+
+        row_tracker += 2
+        ws.cell(row=row_tracker, column=1, value="        MARIO T. MARIANO                                                                                                     ENGR. FLORECIO M. VALINO").font = font_bold_body
+        
+        row_tracker += 1
+        ws.cell(row=row_tracker, column=1, value="             Engineer IV                                                                                                                          PGS-Officer").font = font_regular
 
         row_tracker += 2
         ws.cell(row=row_tracker, column=4, value="                             Approved:").font = font_regular
@@ -264,7 +181,7 @@ def open_excel_preview_modal(parent_window, project_treeview):
         row_tracker += 2
         ws.cell(row=row_tracker, column=4, value="                     HON. AURELIO M. UMALI").font = font_bold_body
         row_tracker += 1
-        ws.cell(row=row_tracker, column=4, value="                                 Governor").font = font_regular
+        ws.cell(row=row_tracker, column=4, value="                                   Governor").font = font_regular
 
         column_widths = {'A': 4.57, 'B': 4.86, 'C': 7.00, 'D': 47.14, 'E': 11.57, 'F': 14.57}
         for col_letter, width_size in column_widths.items():
@@ -278,38 +195,101 @@ def open_excel_preview_modal(parent_window, project_treeview):
             from openpyxl.worksheet.pagebreak import Break
             ws.row_breaks.append(Break(id=45))
 
-        # ==========================================================================
-        # 📂 AUTOMATED USB FOLDER & SAVE CONFIGURATION
-        # ==========================================================================
+        # --- LOCAL DRIVE AUTO-SAVE (Kapag tumatakbo sa PC mo, boss) ---
         date_folder_name = datetime.now().strftime("%m-%Y")
         usb_base_path = r"G:\jrm"
-        
+        clean_project_name = project_name.replace(' ', '_').replace('/', '-').replace('\\', '-')
+        filename = f"POW_{clean_project_name}.xlsx"
+
         if os.path.exists("G:\\"):
             final_export_dir = os.path.join(usb_base_path, date_folder_name)
             os.makedirs(final_export_dir, exist_ok=True)
-            usb_success = True
-        else:
-            final_export_dir = os.getcwd()
-            usb_success = False
-
-        clean_project_name = project_name.replace(' ', '_').replace('/', '-').replace('\\', '-')
-        filename = f"POW_{clean_project_name}.xlsx"
-        full_save_path = os.path.join(final_export_dir, filename)
-
-        try:
+            full_save_path = os.path.join(final_export_dir, filename)
             wb.save(full_save_path)
-            if usb_success:
-                messagebox.showinfo("Tagumpay", f"Matagumpay na nai-save sa USB, boss!\n\nNaka-sort sa Monthly Folder:\n{full_save_path}")
-            else:
-                messagebox.showwarning("Walang USB Drive", f"Babala: Hindi nahanap ang G:\\ drive (USB).\n\nPansamantala itong isinave sa System Folder:\n\n{filename}")
-        except Exception as ex:
-            messagebox.showerror("Error sa Pag-save", f"Hindi mai-save ang file. Siguraduhing sarado ang lumang Excel file.\nDetalye: {ex}")
+            st.toast(f"💾 Auto-saved sa USB: {full_save_path}", icon="✅")
+        else:
+            # Kung nasa Streamlit Cloud Server, isasave lang muna sa memory buffer para ma-download sa browser
+            wb.save(os.path.join(os.getcwd(), filename))
+            
+        # I-save sa buffer para makuha ng Download Button ng browser
+        wb.save(excel_buffer)
+        return excel_buffer.getvalue(), filename
 
-    # Pagkakabit ng Control Buttons sa Top Action Bar ng popup UI
-    btn_save_excel = tk.Button(top_bar, text="📥 EXPORT to EXCEL FILE", bg="#28a745", fg="white", 
-                               font=("Segoe UI", 10, "bold"), padx=15, command=export_to_actual_excel, cursor="hand2")
-    btn_save_excel.pack(side="left")
+    # Patakbuhin ang excel compilation background assembly
+    excel_bytes, download_filename = generate_excel_data()
+
+    with col_btn1:
+        # Modernong Web Download Button para pwedeng ma-download kahit sa CP o browser gamit ang openpyxl generation
+        st.download_button(
+            label="📥 EXPORT TO EXCEL",
+            data=excel_bytes,
+            file_name=download_filename,
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            type="primary",
+            use_container_width=True
+        )
+
+    # ==========================================================================
+    # DETALYE 4: TEXT PRINT PREVIEW WINDOW (Consolas Style Emulation)
+    # ==========================================================================
+    st.markdown("#### 📄 Print Preview Display (Legal Format Layout)")
     
-    btn_quit_preview = tk.Button(top_bar, text="❌ CANCEL", bg="#dc3545", fg="white", 
-                                 font=("Segoe UI", 10, "bold"), padx=15, command=preview_win.destroy, cursor="hand2")
-    btn_quit_preview.pack(side="right")
+    lines = []
+    lines.append(f"{'':<25}Republic of the Philippines")
+    lines.append(f"{'':<22}PROVINCE   OF   NUEVA   ECIJA")
+    lines.append(f"{'':<26}Palayan City")
+    lines.append(f"{'':<15}PROVINCIAL GENERAL SERVICES OFFICE")
+    lines.append("")
+    lines.append(f"{'':<27}PROGRAM OF WORKS")
+    lines.append("")
+    lines.append(f"Project:  {project_name}")
+    lines.append(f"Location: {location}")
+    lines.append("")
+    
+    lines.append("=" * 95)
+    lines.append(f"{'ITEM':<8}{'QTY':<8}{'UNIT':<10}{'DESCRIPTION':<35}{'UNIT PRICE':<16}{'AMOUNT':<15}")
+    lines.append("=" * 95)
+
+    grand_total = 0.0
+    for idx, item in enumerate(pow_items, start=1):
+        qty = float(item[0]) 
+        unit = item[1]
+        raw_name = item[2]
+        raw_price = item[3]
+        
+        name = str(raw_name).replace("\n", " ").replace("\r", " ").strip()
+        try:
+            price = float(raw_price) if raw_price is not None else 0.0
+        except ValueError:
+            price = 0.0
+
+        amount = qty * price
+        grand_total += amount
+        
+        short_name = name[:32] + "..." if len(name) > 32 else name
+        lines.append(f"{idx:<8}{qty:<8.2f}{unit:<10}{short_name:<35}{price:>12,.2f}      {amount:>12,.2f}")
+
+    lines.append("-" * 95)
+    lines.append(f"{'TOTAL':<61}P     {grand_total:>22,.2f}")
+    lines.append("=" * 95)
+    lines.append("")
+
+    lines.append(f"Prepared by:{'':<45}Checked by:")
+    lines.append("")
+    lines.append(f"       JONATHAN G. LADIGNON{'':<37}BENJAMIN N. RAMOS JR")
+    lines.append(f"       Admin. Officer III  {'':<37}Engineer II")
+    lines.append("")
+    lines.append(f"Noted by:{'':<48}Recommending Approval:")
+    lines.append("")
+    lines.append(f"MARIO T. MARIANO{'':<41}ENGR. FLORECIO M. VALINO")
+    lines.append("")
+    lines.append(f"{'':<50}Approved:")
+    lines.append("")
+    lines.append(f"{'':<45}HON. AURELIO M. UMALI")
+    lines.append(f"{'':<50}Governor")
+
+    # Pagsasama-sama ng text lines array
+    full_preview_text = "\n".join(lines)
+    
+    # Ginamit ang st.code upang mapanatili ang fixed-width monospaced (Consolas/Courier) font alignment ng layout mo
+    st.code(full_preview_text, language="text")
