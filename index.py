@@ -101,6 +101,9 @@ def refresh_master_items(file_name="master_items.xlsx", use_streamlit=False):
     # Pinal na ulat
     log_msg(f"MIGRATION DONE! {success_count} items inserted successfully. {skipped_count} items skipped/warned.", "success")
 
-if __name__ == "__main__":
-    # Isulat dito ang saktong filename ng excel mo na kasama sa GitHub folder
-    refresh_master_items("mga_materyales.xlsx", use_streamlit=False)
+# Halimbawa ng ilalagay sa dashboard.py o admin_page.py balang araw:
+if st.button("🔄 Sync Live Excel to DB"):
+    with st.spinner("Ina-update ang master list, mangyaring maghintay..."):
+        from import_master import refresh_master_items
+        # use_streamlit=True para st.success/st.error ang lumabas sa screen!
+        refresh_master_items("mga_materyales.xlsx", use_streamlit=True)
